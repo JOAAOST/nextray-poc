@@ -27,7 +27,7 @@ function paraBase64(bytes: Uint8Array): string {
 }
 
 function deBase64(b64: string): Uint8Array {
-  const bin = atob(b64);
+  const bin = atob(b64); /* ASCII to binary . Decodifica uma string em Base64 para texto ou binários originais em JS*/
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
