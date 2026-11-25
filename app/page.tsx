@@ -1,101 +1,165 @@
 "use client";
 
 // ============================================================
-// NextRay (POC) - Tela inicial (estilo landing page escura)
+// NextRay (POC) - Tela inicial
 // Responsável: Nicoly
 // Branch: feat/front-telainicial
 // Arquivo no projeto: app/page.tsx
+//
+// ESTA VERSÃO JUNTA DUAS COISAS:
+//   - o VISUAL (landing page escura) feito pela Nicoly
+//   - a LÓGICA que o João deixou na develop: a tela envia
+//       { anotacoesSessao }  para  /api/resumo
+//     e recebe
+//       { evolucao }  (demandas, estado emocional, intervenções,
+//                      plano e pontos de atenção)
 //
 // ESTRUTURA DA PÁGINA (de cima para baixo)
 //   1. Cabeçalho: logo, links e botão
 //   2. Hero: título grande, botões e cartões ilustrativos
 //   3. Como funciona: 3 passos
-//   4. Demonstração: a caixa de texto que gera o resumo
+//   4. Demonstração: a caixa de texto que gera a evolução
 //      (é a parte que FUNCIONA de verdade no protótipo)
 //   5. Rodapé
 //
-// FASE 1 (agora): a resposta da IA é FALSA (mock), só para testar a tela.
-// FASE 2 (depois que João e José entregarem): troque a linha
-//   const USAR_MOCK = true;
-// por
-//   const USAR_MOCK = false;
-// e a tela passa a chamar a rota real /api/resumo.
+// USAR_MOCK:
+//   false = usa a IA de verdade (rota /api/resumo)  <- valor para entregar
+//   true  = usa uma resposta FALSA, só para testar o visual sem IA
 // ============================================================
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 
-// >>> ÚNICA LINHA QUE VOCÊ TROCA NA FASE 2 <<<
-const USAR_MOCK = true;
+// Formato da resposta que a rota /api/resumo devolve (definido pelo João)
+interface EvolucaoPsicologica {
+  demandasPrincipais: string[];
+  estadoEmocional: string;
+  intervencoesEAnalise: string;
+  planoEEncaminhamentos: string;
+  pontosDeAtencao: string | null;
+}
+
+// >>> Deixe false na entrega final <<<
+const USAR_MOCK = false;
 
 // ------------------------------------------------------------
-// Resposta FALSA da IA (mock). Espera 1,5 segundo e devolve um texto fixo.
-// Serve para ver o "Carregando..." funcionando sem depender de ninguém.
+// Resposta FALSA (mock). Espera 1,5 segundo e devolve um texto fixo.
+// Serve para testar o "Carregando..." e o visual sem depender da IA.
 // ------------------------------------------------------------
-async function gerarResumoMock(texto: string): Promise<string> {
+async function gerarEvolucaoMock(
+  anotacoesSessao: string
+): Promise<EvolucaoPsicologica> {
   await new Promise((resolve) => setTimeout(resolve, 1500));
-  return (
-    "Resumo de exemplo (resposta simulada, sem IA de verdade). " +
-    `O texto recebido tem ${texto.length} caracteres. ` +
-    "Quando a integração real estiver ativa, o resumo gerado pela IA aparecerá aqui."
-  );
+  return {
+    demandasPrincipais: [
+      "Exemplo de demanda 1 (simulado)",
+      "Exemplo de demanda 2 (simulado)",
+    ],
+    estadoEmocional: `Resposta simulada, sem IA de verdade. O texto recebido tem ${anotacoesSessao.length} caracteres.`,
+    intervencoesEAnalise:
+      "Aqui aparecerão as intervenções e a análise clínica geradas pela IA.",
+    planoEEncaminhamentos:
+      "Aqui aparecerão o plano e os encaminhamentos sugeridos pela IA.",
+    pontosDeAtencao: "Exemplo de ponto de atenção (simulado).",
+  };
 }
 
 // ------------------------------------------------------------
 // Chamada REAL à rota do João (app/api/resumo/route.ts).
-// ATENÇÃO: combine com o João o formato:
-//   - o que a tela ENVIA:   { "texto": "..." }
-//   - o que a rota DEVOLVE: { "resumo": "..." }
-// Se ele usar outros nomes (ex.: "text" ou "summary"), ajuste aqui.
+//   envia:   { "anotacoesSessao": "..." }
+//   recebe:  { "evolucao": { ... } }   ou, se der erro,  { "erro": "..." }
 // ------------------------------------------------------------
-async function gerarResumoReal(texto: string): Promise<string> {
+async function gerarEvolucaoReal(
+  anotacoesSessao: string
+): Promise<EvolucaoPsicologica> {
   const resposta = await fetch("/api/resumo", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ texto }),
+    body: JSON.stringify({ anotacoesSessao }),
   });
 
+  const dados: { erro?: string; evolucao?: EvolucaoPsicologica } =
+    await resposta.json().catch(() => ({}));
+
   if (!resposta.ok) {
-    throw new Error("Erro ao chamar /api/resumo");
+    throw new Error(dados.erro || "Erro ao gerar evolução clínica.");
+  }
+  if (!dados.evolucao) {
+    throw new Error("Resposta inesperada do servidor.");
   }
 
-  const dados = await resposta.json();
-  return dados.resumo;
+  return dados.evolucao;
 }
 
 export default function Home() {
   // "Estados" = a memória da tela. Quando mudam, a tela se atualiza sozinha.
-  const [texto, setTexto] = useState(""); // o que a pessoa digitou
-  const [resumo, setResumo] = useState(""); // o resumo que apareceu
+  const [anotacoesSessao, setAnotacoesSessao] = useState(""); // o que a pessoa digitou
+  const [evolucao, setEvolucao] = useState<EvolucaoPsicologica | null>(null); // a resposta
   const [carregando, setCarregando] = useState(false); // true = esperando a IA
   const [erro, setErro] = useState(""); // mensagem de erro (se houver)
+  const [copiado, setCopiado] = useState(false); // true = acabou de copiar
 
-  async function handleGerarResumo() {
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault(); // impede a página de recarregar
+
     // Não deixa enviar caixa vazia
-    if (texto.trim() === "") {
-      setErro("Escreva ou cole o texto da sessão antes de gerar o resumo.");
+    if (anotacoesSessao.trim() === "") {
+      setErro("Escreva ou cole as anotações da sessão antes de gerar a evolução.");
       return;
     }
 
-    setErro("");
-    setResumo("");
     setCarregando(true);
+    setErro("");
+    setEvolucao(null);
+    setCopiado(false);
 
     try {
       const resultado = USAR_MOCK
-        ? await gerarResumoMock(texto)
-        : await gerarResumoReal(texto);
-      setResumo(resultado);
-    } catch {
-      setErro("Não foi possível gerar o resumo agora. Tente novamente.");
+        ? await gerarEvolucaoMock(anotacoesSessao)
+        : await gerarEvolucaoReal(anotacoesSessao);
+      setEvolucao(resultado);
+    } catch (err) {
+      setErro(
+        err instanceof Error && err.message
+          ? err.message
+          : "Falha na comunicação com o servidor."
+      );
     } finally {
       setCarregando(false); // acontece sempre, deu certo ou não
     }
   }
 
   function handleLimpar() {
-    setTexto("");
-    setResumo("");
+    setAnotacoesSessao("");
+    setEvolucao(null);
     setErro("");
+    setCopiado(false);
+  }
+
+  // Junta todos os campos num texto único e copia para a área de transferência
+  async function copiarParaProntuario() {
+    if (!evolucao) return;
+
+    const demandas = evolucao.demandasPrincipais ?? [];
+    const textoFormatado = [
+      `EVOLUÇÃO DE SESSÃO`,
+      `\n1. Demandas Principais:\n${demandas.map((d) => `- ${d}`).join("\n")}`,
+      `\n2. Estado Emocional e Comportamental:\n${evolucao.estadoEmocional}`,
+      `\n3. Intervenções e Análise Clínica:\n${evolucao.intervencoesEAnalise}`,
+      `\n4. Plano e Encaminhamentos:\n${evolucao.planoEEncaminhamentos}`,
+      evolucao.pontosDeAtencao
+        ? `\n5. Pontos de Atenção:\n${evolucao.pontosDeAtencao}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    try {
+      await navigator.clipboard.writeText(textoFormatado);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      setErro("Não foi possível copiar o texto. Selecione e copie manualmente.");
+    }
   }
 
   return (
@@ -139,7 +203,8 @@ export default function Home() {
             <p className="nx-lead">
               O NextRay é uma proposta de prontuário com criptografia
               Zero-Knowledge: a ideia é que apenas a psicóloga tenha a chave dos
-              registros. Este protótipo demonstra o resumo de sessões com IA.
+              registros. Este protótipo demonstra a estruturação de anotações de
+              sessão com IA.
             </p>
 
             <div className="nx-botoes">
@@ -203,18 +268,23 @@ export default function Home() {
           <div className="nx-container">
             <h2 className="nx-secao-titulo">Como funciona</h2>
             <p className="nx-secao-sub">
-              Do texto da sessão ao resumo, em três passos.
+              Das anotações da sessão à evolução estruturada, em três passos.
             </p>
 
             <div className="nx-passos">
               <div className="nx-passo">
                 <div className="nx-passo-numero">1</div>
                 <h3>Você escreve</h3>
-                <p>Cole ou digite as anotações da sessão na caixa de texto.</p>
+                <p>
+                  Cole ou digite as anotações brutas da sessão na caixa de
+                  texto.
+                </p>
               </div>
               <div className="nx-passo">
                 <div className="nx-passo-numero">2</div>
                 <h3>Sanitização</h3>
+                {/* Confirme com João/José que a rota realmente sanitiza antes da IA.
+                    Se não, ajuste ou remova este texto (nada de prometer e não entregar). */}
                 <p>
                   Antes de chegar à IA, os dados sensíveis passam por uma etapa
                   de sanitização.
@@ -222,10 +292,10 @@ export default function Home() {
               </div>
               <div className="nx-passo">
                 <div className="nx-passo-numero">3</div>
-                <h3>A IA resume</h3>
+                <h3>A IA estrutura</h3>
                 <p>
-                  O resumo volta para a tela em poucos segundos, pronto para
-                  você revisar.
+                  A evolução volta organizada em demandas, estado emocional,
+                  intervenções e plano, pronta para você revisar e copiar.
                 </p>
               </div>
             </div>
@@ -237,32 +307,33 @@ export default function Home() {
           <div className="nx-container">
             <h2 className="nx-secao-titulo">Teste o protótipo</h2>
             <p className="nx-secao-sub">
-              Cole um texto de exemplo (sem dados reais de pacientes) e gere um
-              resumo.
+              Cole anotações de exemplo (sem dados reais de pacientes) e gere a
+              evolução estruturada.
             </p>
 
-            <div className="nx-demo">
-              <label htmlFor="texto-sessao" className="nx-rotulo">
-                Texto da sessão
+            <form className="nx-demo" onSubmit={handleSubmit}>
+              <label htmlFor="anotacoesSessao" className="nx-rotulo">
+                Anotações brutas da sessão
               </label>
               <textarea
-                id="texto-sessao"
+                id="anotacoesSessao"
                 className="nx-caixa"
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                placeholder="Escreva ou cole aqui as anotações da sessão..."
-                rows={8}
+                value={anotacoesSessao}
+                onChange={(e) => setAnotacoesSessao(e.target.value)}
+                placeholder="Ex: Paciente relata sobrecarga no trabalho e crises de ansiedade antes de reuniões. Trabalhamos identificação de pensamentos automáticos e comunicação assertiva..."
+                rows={7}
                 disabled={carregando}
               />
 
               <div className="nx-demo-botoes">
                 <button
-                  type="button"
+                  type="submit"
                   className="nx-botao nx-botao-azul"
-                  onClick={handleGerarResumo}
                   disabled={carregando}
                 >
-                  {carregando ? "Carregando..." : "Gerar resumo"}
+                  {carregando
+                    ? "Estruturando evolução..."
+                    : "Gerar evolução de prontuário"}
                 </button>
 
                 <button
@@ -281,17 +352,60 @@ export default function Home() {
                 </p>
               )}
 
-              {resumo !== "" && (
-                <section aria-live="polite" className="nx-resumo">
-                  <h3>Resumo</h3>
-                  <p>{resumo}</p>
+              {evolucao && (
+                <section aria-live="polite" className="nx-resultado">
+                  <div className="nx-resultado-topo">
+                    <h3>Evolução estruturada</h3>
+                    <button
+                      type="button"
+                      className="nx-botao nx-botao-contorno nx-botao-pequeno"
+                      onClick={copiarParaProntuario}
+                    >
+                      {copiado
+                        ? "Copiado para o prontuário!"
+                        : "Copiar texto formatado"}
+                    </button>
+                  </div>
+
+                  {evolucao.pontosDeAtencao && (
+                    <div className="nx-alerta">
+                      <strong>Ponto de atenção / alerta clínico</strong>
+                      {evolucao.pontosDeAtencao}
+                    </div>
+                  )}
+
+                  <div className="nx-grade">
+                    <div className="nx-bloco">
+                      <h4>Demandas principais</h4>
+                      <ul>
+                        {(evolucao.demandasPrincipais ?? []).map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="nx-bloco">
+                      <h4>Estado emocional e comportamental</h4>
+                      <p>{evolucao.estadoEmocional}</p>
+                    </div>
+
+                    <div className="nx-bloco">
+                      <h4>Intervenções e análise clínica</h4>
+                      <p>{evolucao.intervencoesEAnalise}</p>
+                    </div>
+
+                    <div className="nx-bloco">
+                      <h4>Plano e encaminhamentos</h4>
+                      <p>{evolucao.planoEEncaminhamentos}</p>
+                    </div>
+                  </div>
                 </section>
               )}
 
               <p className="nx-aviso">
                 Protótipo (POC): não utilize dados reais de pacientes.
               </p>
-            </div>
+            </form>
           </div>
         </section>
       </main>
@@ -599,16 +713,47 @@ html { scroll-behavior: smooth; }
   color: #fecaca;
   font-size: 15px;
 }
-.nx-resumo {
-  margin-top: 20px;
-  padding: 18px;
-  border-radius: 12px;
-  background: rgba(52, 211, 153, 0.1);
-  border: 1px solid rgba(52, 211, 153, 0.35);
-}
-.nx-resumo h3 { margin: 0 0 8px; font-size: 16px; color: #5eead4; }
-.nx-resumo p { margin: 0; line-height: 1.6; color: #e8edf9; }
 .nx-aviso { margin: 20px 0 0; font-size: 13px; color: #8d99b8; }
+
+/* ---------- Resultado (evolução estruturada) ---------- */
+.nx-resultado { margin-top: 28px; }
+.nx-resultado-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.nx-resultado-topo h3 { margin: 0; font-size: 20px; color: #ffffff; }
+.nx-alerta {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fde68a;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.nx-alerta strong { display: block; margin-bottom: 4px; color: #fcd34d; }
+.nx-grade { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.nx-bloco {
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.nx-bloco h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8fa8ff;
+}
+.nx-bloco p { margin: 0; font-size: 15.5px; line-height: 1.6; color: #dbe3f7; }
+.nx-bloco ul { margin: 0; padding-left: 20px; font-size: 15.5px; line-height: 1.7; color: #dbe3f7; }
 
 /* ---------- Rodapé ---------- */
 .nx-rodape {
