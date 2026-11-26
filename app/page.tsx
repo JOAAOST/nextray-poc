@@ -638,7 +638,7 @@ export default function Home() {
                       className="nx-input"
                       value={senhaMestra}
                       onChange={(e) => setSenhaMestra(e.target.value)}
-                      placeholder="Senha mestra (mínimo 8 caracteres)"
+                      placeholder="Senha mestra (mín. 8 caracteres)"
                       autoComplete="new-password"
                       disabled={salvando}
                     />
@@ -1215,7 +1215,7 @@ html { scroll-behavior: smooth; }
   color: #8fa8ff;
 }
 .nx-bloco p { margin: 0; font-size: 15.5px; line-height: 1.6; color: #dbe3f7; }
-.nx-bloco ul { margin: 0; padding-left: 20px; font-size: 15.5px; line-height: 1.7; color: #dbe3f7; }
+.nx-bloco ul { margin: 0; padding-left: 20px; list-style: disc; font-size: 15.5px; line-height: 1.7; color: #dbe3f7; }
 
 /* ---------- O que o servidor guarda ---------- */
 .nx-vazio { margin: 20px 0 0; font-size: 15px; color: #8d99b8; }
